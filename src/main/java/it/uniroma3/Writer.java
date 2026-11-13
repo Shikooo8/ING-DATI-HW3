@@ -1,77 +1,72 @@
 package it.uniroma3;
 
-import java.io.File;
-import java.io.FileReader;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 
 import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.analysis.core.WhitespaceAnalyzer;
-import org.apache.lucene.analysis.en.EnglishAnalyzer;
 import org.apache.lucene.analysis.it.ItalianAnalyzer;
 import org.apache.lucene.analysis.miscellaneous.PerFieldAnalyzerWrapper;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
-import org.apache.lucene.document.StringField;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.FSDirectory;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
 
 public class Writer {
 
-    private Path pathIdx;
+    private Directory directory;
     private Path pathTxt;
 
-    public Writer(Path pathIdx, Path pathTxt) {
-        this.pathIdx = pathIdx;
+    public Writer(Directory directory, Path pathTxt) {
+        this.directory = directory;
         this.pathTxt = pathTxt;
     }
 
     public void createIndex() throws IOException {
+        long start = System.nanoTime();
+        int indicizzati = 0;
 
-        Directory directory = FSDirectory.open(pathIdx);
-
-        Map<String, Analyzer> byField = Map.of( //Se ne abbiamo diversi per campo
-            "titolo", new StandardAnalyzer(),
-            "contenuto", new ItalianAnalyzer()
-        );
+        Map<String, Analyzer> byField = Map.of( // Se ne abbiamo diversi per campo
+                "titolo", new StandardAnalyzer(),
+                "contenuto", new ItalianAnalyzer());
         Analyzer perFieldAnalyzer = new PerFieldAnalyzerWrapper(new StandardAnalyzer(), byField);
 
         IndexWriterConfig config = new IndexWriterConfig(perFieldAnalyzer);
+        config.setOpenMode((IndexWriterConfig.OpenMode.CREATE));
+
         IndexWriter writer = new IndexWriter(directory, config);
 
+        DirectoryStream<Path> files = Files.newDirectoryStream(pathTxt, ".txt");
 
-        File cartellaTxt = pathTxt.toFile();
-        File[] listaFile = cartellaTxt.listFiles();
+        for (Path file : files) {
+            if (Files.isRegularFile(file)) { // TODO controlla
 
-        if(listaFile != null){
-            
-            for (File file : listaFile) {
-                if (file.getName().endsWith(".txt") && file.isFile()) {
-                    Document doc = new Document();
-    
-                    doc.add(new TextField("titolo", file.getName(), Field.Store.YES));
-    
-                    doc.add(new TextField("contenuto", new FileReader(file)));
-    
-                    writer.addDocument(doc);
-                }
-    
+                String contenuto = Files.readString(file, StandardCharsets.UTF_8);
+                String nomeFile = file.getFileName().toString();
+                String nomePulito = nomeFile.replaceAll("(?i)\\.txt$", "").replaceAll("[_\\-.]+", " ");
+
+                Document doc = new Document();
+
+                doc.add(new TextField("titolo", nomePulito, Field.Store.YES));
+                doc.add(new TextField("contenuto", contenuto, Field.Store.NO));
+                // paper.add(new StringField("id", "p01", Field.Store.YES)); ci metto l'ID
+
+                writer.addDocument(doc);
+                indicizzati++;
             }
-            writer.commit();
-            writer.close();
         }
-        else System.err.println("La cartella è vuota o non è stata trovata");
-        // Document paper = new Document();
-        // paper.add(new StringField("id", "p01", Field.Store.YES));
-        // paper.add(new TextField("title", "Neural information retrieval", Field.Store.YES));
-        // paper.add(new TextField("abstract", "Neural models improve information retrieval and ranking.", Field.Store.NO));
-        // writer.addDocument(paper);
+        writer.commit();
+        writer.close();
+        files.close();
 
+        long ms = (System.nanoTime() - start) / 1000000;
+        System.out.println("File incicizzati: " + indicizzati + " in " + ms + " ms");
     }
 
 }
