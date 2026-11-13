@@ -13,6 +13,7 @@ import org.apache.lucene.analysis.miscellaneous.PerFieldAnalyzerWrapper;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
+import org.apache.lucene.document.StoredField;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.index.IndexWriter;
@@ -42,11 +43,10 @@ public class Writer {
 
         IndexWriter writer = new IndexWriter(directory, config);
 
-        DirectoryStream<Path> files = Files.newDirectoryStream(pathTxt, ".txt");
+        DirectoryStream<Path> files = Files.newDirectoryStream(pathTxt, "*.txt");
 
         for (Path file : files) {
-            if (Files.isRegularFile(file)) { // TODO controlla
-
+            
                 String contenuto = Files.readString(file, StandardCharsets.UTF_8);
                 String nomeFile = file.getFileName().toString();
                 String nomePulito = nomeFile.replaceAll("(?i)\\.txt$", "").replaceAll("[_\\-.]+", " ");
@@ -55,11 +55,12 @@ public class Writer {
 
                 doc.add(new TextField("titolo", nomePulito, Field.Store.YES));
                 doc.add(new TextField("contenuto", contenuto, Field.Store.NO));
+                doc.add(new StoredField("percorso", nomeFile)); // solo per stamparlo
+
                 // paper.add(new StringField("id", "p01", Field.Store.YES)); ci metto l'ID
 
                 writer.addDocument(doc);
                 indicizzati++;
-            }
         }
         writer.commit();
         writer.close();
